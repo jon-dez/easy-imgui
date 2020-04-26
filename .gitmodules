@@ -1,3 +1,6 @@
 [submodule "imgui"]
 	path = imgui
 	url = https://github.com/ocornut/imgui
+[submodule "stb"]
+	path = tools/tools-squared/stb
+	url = https://github.com/nothings/stb
