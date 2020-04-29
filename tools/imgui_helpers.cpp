@@ -21,8 +21,8 @@ namespace ImGui {
         ImGui::PopStyleVar();
     }
 
-    void MakeSection(Display display_section, bool* collapsable, int collapse_flags){
-        if(!ImGui::BeginChild(display_section.first.c_str())){
+    void MakeSection(Display display_section, const ImVec2& size, bool* collapsable, int collapse_flags){
+        if(!ImGui::BeginChild(display_section.first.c_str(), size)){
             ImGui::EndChild();
         } else {
             if((!collapsable) |

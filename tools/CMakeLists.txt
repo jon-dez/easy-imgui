@@ -11,6 +11,9 @@ add_library(${P} STATIC
 
     # Image Load
     ImageLoad/ImageLoad.cpp
+
+    # TP
+    TP/TP.cpp
 )
 
 target_include_directories(${P} PRIVATE

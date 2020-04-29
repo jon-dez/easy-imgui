@@ -28,8 +28,8 @@ namespace GPUTexture {
      */
     namespace SideLoader {
         using GPUTextureJob = std::function<void()>;
-        void start();
-        void addJob(std::function<void()>);
+        void create_context();
+        void add_job(std::function<void()>);
     }
 }
 

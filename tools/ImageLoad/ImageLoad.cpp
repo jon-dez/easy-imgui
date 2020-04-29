@@ -40,6 +40,8 @@ SOFTWARE.
 #include "GL/gl3w.h"
 #include "GLFW/glfw3.h"
 
+#include "../TP/TP.hpp"
+
 namespace GPUTexture {
     void openGLUpload(ImageRID& rid, int width, int height, int num_channels, const uint8_t* bytes){
         unsigned int pixel_fmt_src;
@@ -87,46 +89,25 @@ namespace GPUTexture {
     namespace SideLoader {
         namespace {
             static GLFWwindow* texture_sideload_ctx = nullptr;
-            static std::queue<GPUTextureJob> texture_jobs0;
-            static std::mutex job_queue_mutex;
-            static std::condition_variable texture_job_avail;
-
-            static void waitOnGPUTextureJobs(){
-                while(true){
-                    std::unique_lock<std::mutex> lock(job_queue_mutex);
-                    // Wait indefinitely until a job is available.
-                    texture_job_avail.wait(lock, []{ return texture_jobs0.size() > 0; });
-
-                    auto& tex_job = texture_jobs0.front();
-
-                    glfwMakeContextCurrent(texture_sideload_ctx);
-                    tex_job();
-                    glfwMakeContextCurrent(NULL);
-
-                    texture_jobs0.pop(); // Remove the job from the queue since it has been processed.
-                }
-
-                glfwDestroyWindow(texture_sideload_ctx);
-                texture_sideload_ctx = nullptr;
-            }
-
         }
 
-        void start() {
+        void create_context() {
             if(texture_sideload_ctx)
-                return; // Has already been successfully started.
+                return; // Has already been successfully created.
 
             // Create a seperate glfw context and share texture resources with the current context.
             glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
             texture_sideload_ctx = glfwCreateWindow(640, 480, "Texture sideloader.", NULL, glfwGetCurrentContext());
-            std::thread sideload_thread(waitOnGPUTextureJobs);
-            sideload_thread.detach(); // We do not need to wait on the thread any longer.
         }
         
-        void addJob(GPUTextureJob job){
-            std::lock_guard<std::mutex> lock(job_queue_mutex);
-            texture_jobs0.push(job);
-            texture_job_avail.notify_one();
+        void add_job(GPUTextureJob job){
+            TP::add_job(
+                [job](){
+                    glfwMakeContextCurrent(texture_sideload_ctx);
+                    job();
+                    glfwMakeContextCurrent(NULL);
+                }
+            );
         }
     }
 }
@@ -139,7 +120,7 @@ inline void ImageResource::freeBytes() {
 }
 
 void ImageResource::freeTexture() {
-    GPUTexture::SideLoader::addJob([this](){
+    GPUTexture::SideLoader::add_job([this](){
         GPUTexture::openGLFree(this->rid);
         this->rid = 0;
     });
@@ -168,7 +149,7 @@ void ImageResource::load(const std::string& image_location, bool to_gpu, bool fl
 void ImageResource::sendToGPU() {
     if(!this->data.bytes)
         return; // There is no image data to upload to the gpu.
-    GPUTexture::SideLoader::addJob([this](){
+    GPUTexture::SideLoader::add_job([this](){
         GPUTexture::openGLFree(this->rid);
         GPUTexture::openGLUpload(this->rid, this->data.width, this->data.height, this->data.num_channels, this->data.bytes);
         delete[] this->data.bytes;

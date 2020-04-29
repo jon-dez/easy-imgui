@@ -63,7 +63,7 @@ namespace ImGui {
     void DisableItems();
     void EnableItems();
 
-    void MakeSection(Display display_section, bool* collapsable = nullptr, int collapse_flags = 0);
+    void MakeSection(Display display_section, const ImVec2& size = {0,0}, bool* collapsable = nullptr, int collapse_flags = 0);
 
     class ScopeDisableItems {
         bool disabled;
