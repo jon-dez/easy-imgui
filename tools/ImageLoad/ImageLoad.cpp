@@ -115,7 +115,7 @@ namespace GPUTexture {
 inline void ImageResource::freeBytes() {
     if(this->data.bytes){
         stbi_image_free(this->data.bytes);
-        this->data.bytes = NULL;
+        this->data.bytes = nullptr;
     }
 }
 
@@ -153,6 +153,7 @@ void ImageResource::sendToGPU() {
         GPUTexture::openGLFree(this->rid);
         GPUTexture::openGLUpload(this->rid, this->data.width, this->data.height, this->data.num_channels, this->data.bytes);
         delete[] this->data.bytes;
+        this->data.bytes = nullptr;
     });
 }
 

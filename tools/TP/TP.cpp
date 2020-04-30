@@ -3,12 +3,13 @@
 #include <queue>
 #include <thread>
 #include "TP.hpp"
+#include <iostream>
 
 namespace TP {
     namespace {
         static std::stringstream msg_str;
 
-        static bool keep_alive = true;
+        static bool terminate = false;
         static std::vector<std::thread> thread_pool;
         static std::mutex job_q_mutex;
         static std::condition_variable job_avail;
@@ -18,11 +19,15 @@ namespace TP {
             msg_str << "Worker thread " << id << " has started." << std::endl;
 
             int num_jobs = 0;
-            while(keep_alive){
+            while(true){
                 std::function<void()> job;
                 /* Let the unique lock be destroyed after this code block. */{
                     std::unique_lock<std::mutex> lock(job_q_mutex);
-                    job_avail.wait(lock, [](){ return jobs.size() > 0; });
+                    job_avail.wait(lock, [](){
+                        return (jobs.size() > 0) || terminate;
+                    });
+                    if(terminate)
+                        break;
                     job = jobs.front();
                     jobs.pop();
                 }
@@ -64,13 +69,14 @@ namespace TP {
     void join_pool(){
         {
             std::lock_guard<std::mutex> lock(job_q_mutex);
-            keep_alive = false;
+            terminate = true;
         }
         job_avail.notify_all();
         for(auto& worker: thread_pool)
             worker.join();
         
         msg_str << "Thread pool has joined." << std::endl;
+        std::cout << msg_str.rdbuf() << std::endl;
     }
 
     const std::stringstream& message_stream(){
