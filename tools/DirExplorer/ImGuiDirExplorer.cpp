@@ -3,6 +3,10 @@
 #include <memory>
 #include <stack>
 
+#ifdef WIN32
+constexpr auto& strtok_r = strtok_s;
+#endif
+
 #include "ImGuiDirExplorer.hpp"
 #include "dir_explorer.hpp"
 
@@ -157,10 +161,10 @@ namespace ImGui {
 
                 if(ImGui::Selectable(dir_entry.path().filename().string().c_str())){
                     if (dir_entry.is_directory()){
-                        dir_explorer.second->swapDir(dir_entry.path());
+                        dir_explorer.second->swapDir(dir_entry.path().string());
                     }
                     else if(dir_entry.is_regular_file()) {
-                            dir_explorer.second->selectChild(dir_entry.path());
+                            dir_explorer.second->selectChild(dir_entry.path().string());
                     }
                 }
             }

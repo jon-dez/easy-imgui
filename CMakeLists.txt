@@ -54,6 +54,7 @@ add_library(imgui-gl3w STATIC
 target_include_directories(imgui-gl3w PRIVATE
     imgui
     imgui/examples/libs/gl3w
+    imgui/examples/libs/glfw/include
 )
 # Link ImGui with GL3W
 target_link_libraries(imgui-gl3w
@@ -75,6 +76,7 @@ target_include_directories(${P} PRIVATE
     # +ImGui with easy-imgui.
     imgui/examples
     imgui/examples/libs/gl3w
+    imgui/examples/libs/glfw/include
 )
 
 # Let's add the glue that forms a bond known as easy-imgui.
