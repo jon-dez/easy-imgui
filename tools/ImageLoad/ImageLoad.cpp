@@ -87,9 +87,9 @@ namespace GPUTexture {
     }
     
     namespace SideLoader {
-        namespace {
-            static GLFWwindow* texture_sideload_ctx = nullptr;
-        }
+        static std::mutex gl_ctx_mutex;
+        static GLFWwindow* texture_sideload_ctx = nullptr;
+
 
         void create_context() {
             if(texture_sideload_ctx)
@@ -103,6 +103,7 @@ namespace GPUTexture {
         void add_job(GPUTextureJob job){
             TP::add_job(
                 [job](){
+                    std::lock_guard<std::mutex> lock{gl_ctx_mutex};
                     glfwMakeContextCurrent(texture_sideload_ctx);
                     job();
                     glfwMakeContextCurrent(NULL);
