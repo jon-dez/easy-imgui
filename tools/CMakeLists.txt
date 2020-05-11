@@ -31,3 +31,9 @@ target_include_directories(${P} PRIVATE
 target_link_libraries(${P}
     imgui-gl3w
 )
+
+if(LINUX)
+    target_link_libraries(${P}
+        pthread
+    )
+endif()

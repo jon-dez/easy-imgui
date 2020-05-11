@@ -78,6 +78,18 @@ namespace GPUTexture {
         rid = tex_id;
     }
 
+    void openGLCopy(ImageRID& dest, const ImageRID& src, int width, int height, int num_channels){
+        ImageRID rid = 0;
+        // Prepare the destination texture.
+        openGLUpload(rid, width, height, num_channels, nullptr);
+        glCopyImageSubData(
+            src, GL_TEXTURE_2D, 0, 0, 0, 0,
+            rid,GL_TEXTURE_2D, 0, 0, 0, 0,
+            width, height, 1
+        );
+        dest = rid;
+    }
+
     /**
      * Does not modify the value of rid.
      * "glDeleteTextures silently ignores 0's and names that do not correspond to existing textures." - khronos.org
@@ -113,6 +125,15 @@ namespace GPUTexture {
     }
 }
 
+ImageResourceData::ImageResourceData(const ImageResourceData& copy_data):
+width{copy_data.width},
+height{copy_data.height},
+num_channels{copy_data.num_channels}
+{
+    if(copy_data.bytes)
+        memcpy(this->bytes, copy_data.bytes, width*height*num_channels);
+}
+
 inline void ImageResource::freeBytes() {
     if(this->data.bytes){
         stbi_image_free(this->data.bytes);
@@ -130,6 +151,18 @@ void ImageResource::freeTexture() {
 ImageResource::~ImageResource() {
     this->freeBytes();
     this->freeTexture();
+}
+
+ImageResource::ImageResource(const ImageResource& copy_img_res):
+data{copy_img_res.data}
+{
+    // Copy the gpu image resource.
+    if(copy_img_res.rid)
+        GPUTexture::SideLoader::add_job(
+            [this, cpy_rid = copy_img_res.rid](){
+                GPUTexture::openGLCopy(this->rid, cpy_rid, this->getWidth(), this->getHeight(), this->data.num_channels);
+            }
+        );
 }
 
 ImageResource::ImageResource(const std::string& image_location, bool to_gpu, bool flip) {

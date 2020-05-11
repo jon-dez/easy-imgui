@@ -8,10 +8,19 @@
 using ImageRID = uintptr_t;
 
 struct ImageResourceData {
-    int width = 0;
-    int height = 0;
-    int num_channels = 0;
-    uint8_t* bytes = nullptr;
+    int width;
+    int height;
+    int num_channels;
+    uint8_t* bytes;
+
+    inline ImageResourceData():
+    width{},
+    height{},
+    num_channels{},
+    bytes{}
+    {}
+
+    ImageResourceData(const ImageResourceData& copy_data);
 
     ~ImageResourceData(){
         if(bytes)
@@ -46,6 +55,7 @@ private:
 public:
     ~ImageResource();
     inline ImageResource(){}
+    ImageResource(const ImageResource& img_res);
     ImageResource(const std::string& image_location, bool to_gpu, bool flip = false);
     void load(const std::string& image_location, bool to_gpu, bool flip = false);
     

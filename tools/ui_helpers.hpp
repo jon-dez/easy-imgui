@@ -97,4 +97,65 @@ namespace ImGui {
     };
 
     void ImageAutoFit(ImTextureID user_texture_id, const ImVec2& size, const ImVec2& uv0 = ImVec2(0,0), const ImVec2& uv1 = ImVec2(1,1), const ImVec4& tint_col = ImVec4(1,1,1,1), const ImVec4& border_col = ImVec4(0,0,0,0));
+
+    template<typename T>
+    void Show(T& t);
+
+    template<typename T>
+    inline void ShowP(void* p) {
+        T& t = *(T*)p;
+        Show(t);
+    }
+
+    namespace DragDropData {
+        
+        struct Handler;
+        using TypeHandler = std::pair<std::string, Handler>;
+        struct Handler {
+            std::function<void(void*)> tool_tip;
+            std::function<void*(void*)> copy;
+            std::function<void*(void*)> move;
+            std::function<void(void*, void*)> swap;
+
+            template<typename T>
+            static constexpr TypeHandler Make(
+                std::function<void*(void*)> copy_func = [](void* copy){
+                    T& t = *(T*)copy;
+                    return new T{t};
+                },
+                std::function<void*(void*)> move_func = [](void* move){
+                    T& f = *(T*)move;
+                    return new T{std::move(f)};
+                },
+                std::function<void(void*,void*)> swap_func = [](void* swap_0, void* swap_1){
+                    T& s0 = *(T*)swap_0;
+                    T& s1 = *(T*)swap_1;
+                    std::swap(s0, s1);
+                }
+            ){
+                return {T::str_name, {
+                    ShowP<T>, copy_func, move_func, swap_func}
+                };
+            }
+        };
+        
+        void AddHandler(TypeHandler&& handler);
+        Handler* GetHandler(const std::string& str_name);
+
+        template<typename T>
+        void BeginSource(T& src_type, ImGuiDragDropFlags flags = ImGuiDragDropFlags_SourceAllowNullID, ImGuiCond cond = ImGuiCond_Once){
+            ImGui::PushID(&src_type);
+            if(ImGui::BeginDragDropSource(flags)){
+                uintptr_t dat_ptr = (uintptr_t)&src_type;
+                ImGui::MakeSection({T::str_name,
+                    [&](){
+                        Show(src_type);
+                    }
+                }, {200,100});
+                ImGui::SetDragDropPayload(T::str_name, &dat_ptr, sizeof(uintptr_t), cond);
+                ImGui::EndDragDropSource();
+            }
+            ImGui::PopID();
+        }
+    }
 }

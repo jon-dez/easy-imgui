@@ -1,3 +1,4 @@
+#include <map>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ui_helpers.hpp"
@@ -42,5 +43,19 @@ namespace ImGui {
         auto avail_size = ImGui::GetContentRegionAvail();
         auto resize = resizeRectAToFitInRectB(size_to_fit, avail_size);
         ImGui::Image(user_texture_id, resize, uv0, uv1, tint_col, border_col);
+    }
+
+    namespace DragDropData {
+        static std::map<std::string, ImGui::DragDropData::Handler> handlers;
+
+        void AddHandler(TypeHandler&& handler){
+            handlers.insert(std::move(handler));
+        }
+        Handler* GetHandler(const std::string& str_name){
+            auto find_res = handlers.find(str_name);
+            if(find_res == handlers.end())
+                return nullptr;
+            return &find_res->second;
+        }
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui/imgui.h"
+#include "imgui/misc/cpp/imgui_stdlib.h"
 #include "Interface/ImGuiInterface.hpp"
 
 #ifdef EASY_HELPERS_UI

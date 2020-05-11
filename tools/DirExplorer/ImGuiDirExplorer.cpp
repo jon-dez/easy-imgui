@@ -141,7 +141,7 @@ namespace ImGui {
             }
 
             for(auto dir_entry : *dir_explorer.second){
-                static auto _excludeDirEntry = [&](){
+                auto _excludeDirEntry = [&](){
                     bool filter_match = false;
                     char* it = filter_tok;
                     while(*it){
@@ -213,7 +213,7 @@ namespace ImGui {
             
             if(!ImGui::IsPopupOpen(explorer_name.c_str())) {
                 ImGui::OpenPopup(explorer_name.c_str());
-                ImGui::SetNextWindowSize(init_size);
+                //ImGui::SetNextWindowSize(init_size);
             }
             
             bool open = false;

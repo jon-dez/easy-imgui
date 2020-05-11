@@ -70,7 +70,7 @@ add_library(${P}
     Interface/ImGuiMain.cpp
 )
 # Let easy-imgui know where to find header files provided by ImGui.
-target_include_directories(${P} PRIVATE
+target_include_directories(${P} PUBLIC
     imgui
     # Get the required implementation to use GL3W+GLFW+OpenlGL
     # +ImGui with easy-imgui.
