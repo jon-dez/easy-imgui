@@ -45,8 +45,8 @@ namespace ImGui {
         ImGui::Image(user_texture_id, resize, uv0, uv1, tint_col, border_col);
     }
 
-    namespace DragDropData {
-        static std::map<std::string, ImGui::DragDropData::Handler> handlers;
+    namespace DragDrop {
+        static std::map<std::string, ImGui::DragDrop::Handler> handlers;
 
         void AddHandler(TypeHandler&& handler){
             handlers.insert(std::move(handler));

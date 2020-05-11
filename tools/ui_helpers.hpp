@@ -107,7 +107,7 @@ namespace ImGui {
         Show(t);
     }
 
-    namespace DragDropData {
+    namespace DragDrop {
         
         struct Handler;
         using TypeHandler = std::pair<std::string, Handler>;
