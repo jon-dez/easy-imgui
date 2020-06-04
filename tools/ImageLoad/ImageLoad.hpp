@@ -13,20 +13,26 @@ struct ImageResourceData {
     int num_channels;
     uint8_t* bytes;
 
-    inline ImageResourceData():
-    width{},
-    height{},
-    num_channels{},
-    bytes{}
-    {}
-
+    ImageResourceData() = default;
     ImageResourceData(const ImageResourceData& copy_data);
+    ImageResourceData(ImageResourceData&& move_data);
+
+    ImageResourceData& operator=(const ImageResourceData& copy_data);
 
     ~ImageResourceData(){
         if(bytes)
             delete[] bytes;
     }
 };
+
+namespace std {
+    inline void swap(ImageResourceData& a, ImageResourceData& b){
+        swap(a.width, b.width);
+        swap(a.height, b.height);
+        swap(a.num_channels, b.num_channels);
+        swap(a.bytes, b.bytes);
+    }
+}
 
 namespace GPUTexture {
     void openGLUpload(ImageRID& rid, int width, int height, int num_channels, const uint8_t* bytes);

@@ -125,13 +125,25 @@ namespace GPUTexture {
     }
 }
 
-ImageResourceData::ImageResourceData(const ImageResourceData& copy_data):
-width{copy_data.width},
-height{copy_data.height},
-num_channels{copy_data.num_channels}
+
+ImageResourceData::ImageResourceData(const ImageResourceData& copy_data)
 {
+    *this = copy_data;
+}
+
+ImageResourceData::ImageResourceData(ImageResourceData&& move_data)
+{
+    std::swap(*this, move_data);
+    move_data.bytes = nullptr;
+}
+
+ImageResourceData& ImageResourceData::operator=(const ImageResourceData& copy_data){
+    width = copy_data.width;
+    height = copy_data.height;
+    num_channels = copy_data.num_channels;
     if(copy_data.bytes)
         memcpy(this->bytes, copy_data.bytes, width*height*num_channels);
+    return *this;
 }
 
 inline void ImageResource::freeBytes() {

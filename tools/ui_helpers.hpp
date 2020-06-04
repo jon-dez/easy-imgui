@@ -5,6 +5,8 @@
 #include <functional>
 #include <utility>
 #include <string>
+#include <map>
+#include <memory>
 #include <stack>
 
 #include "imgui.h"
@@ -108,54 +110,145 @@ namespace ImGui {
     }
 
     namespace DragDrop {
-        
-        struct Handler;
-        using TypeHandler = std::pair<std::string, Handler>;
-        struct Handler {
-            std::function<void(void*)> tool_tip;
-            std::function<void*(void*)> copy;
-            std::function<void*(void*)> move;
-            std::function<void(void*, void*)> swap;
+        namespace detail {
+            struct SourceBase {
+                virtual void show() = 0;
+                virtual std::unique_ptr<SourceBase> copy() const = 0;
+                virtual void move(void* into) = 0;
+                virtual void swap(void* with) = 0;
+                virtual const char* typeName() = 0;
 
-            template<typename T>
-            static constexpr TypeHandler Make(
-                std::function<void*(void*)> copy_func = [](void* copy){
-                    T& t = *(T*)copy;
-                    return new T{t};
-                },
-                std::function<void*(void*)> move_func = [](void* move){
-                    T& f = *(T*)move;
-                    return new T{std::move(f)};
-                },
-                std::function<void(void*,void*)> swap_func = [](void* swap_0, void* swap_1){
-                    T& s0 = *(T*)swap_0;
-                    T& s1 = *(T*)swap_1;
-                    std::swap(s0, s1);
+                virtual ~SourceBase() = default;
+            };
+
+            template<typename SourceType>
+            struct SourceDerived : public SourceBase {
+                SourceType source_data_;
+                static constexpr const char * const str_name = SourceType::str_name;
+
+                SourceDerived(SourceType source_data)
+                    : source_data_{std::move(source_data)}
+                {}
+
+                void show() override {
+                    ImGui::Show(source_data_);
                 }
-            ){
-                return {T::str_name, {
-                    ShowP<T>, copy_func, move_func, swap_func}
-                };
+
+                std::unique_ptr<SourceBase> copy() const override {
+                    return std::make_unique<SourceDerived>(source_data_);
+                }
+
+                void move(void* into) override {
+                    SourceType& into_ref{*(SourceType*)into};
+                    into_ref = std::move(source_data_);
+                }
+
+                void swap(void* with) override {
+                    SourceType& with_ref{*(SourceType*)with};
+                    std::swap(source_data_, with_ref);
+                }
+
+                inline const char * typeName() override {
+                    return str_name;
+                }
+            };
+        }
+
+        struct Source {
+            static constexpr const char* type_name = "easy_drag_and_drop_source";
+            std::unique_ptr<detail::SourceBase> p_{nullptr};
+
+            Source() = default;
+
+            template<typename SourceType>
+            Source(SourceType source_data)
+                : p_{std::make_unique<detail::SourceDerived<SourceType>>(std::move(source_data))}
+            {}
+
+            inline Source(Source&& move) noexcept
+                : p_{std::move(move.p_)}
+            {}
+
+            inline Source(const Source& copy)
+            {
+                *this = copy;
+            }
+
+            friend void swap(Source& a, Source& b);
+
+            Source& operator=(const Source& copy){
+                if(copy.p_)
+                    p_ = copy.p_->copy();
+                else
+                    p_ = nullptr;
+                return *this;
+            }
+
+            inline void show() {
+                if(p_)
+                    p_->show();
+                else
+                    ImGui::Text("There is no source data.");
+            }
+
+            inline const char* typeName(){
+                if(p_)
+                    return p_->typeName();
+                return "NULL";
             }
         };
-        
-        void AddHandler(TypeHandler&& handler);
-        Handler* GetHandler(const std::string& str_name);
+
+
+        void SetSource(Source source);
+        Source& GetSource();
 
         template<typename T>
         void BeginSource(T& src_type, ImGuiDragDropFlags flags = ImGuiDragDropFlags_SourceAllowNullID, ImGuiCond cond = ImGuiCond_Once){
-            ImGui::PushID(&src_type);
+            //ImGui::PushID(&src_type);
             if(ImGui::BeginDragDropSource(flags)){
-                uintptr_t dat_ptr = (uintptr_t)&src_type;
-                ImGui::MakeSection({T::str_name,
-                    [&](){
-                        Show(src_type);
+                if(auto payload = ImGui::GetDragDropPayload()){
+                    if(cond == ImGuiCond_Always || payload->DataFrameCount == -1){
+                        SetSource(src_type);
                     }
-                }, {200,100});
-                ImGui::SetDragDropPayload(T::str_name, &dat_ptr, sizeof(uintptr_t), cond);
+                    ImGui::MakeSection({GetSource().typeName(),
+                        [](){
+                            GetSource().show();
+                        }
+                    }, {200,100});
+                }
+
+                if(ImGui::SetDragDropPayload(
+                    Source::type_name,
+                    NULL,
+                    0,
+                    cond
+                )){
+                    ;
+                }
                 ImGui::EndDragDropSource();
             }
-            ImGui::PopID();
+            //ImGui::PopID();
         }
+        
+        void ReceiveSource(std::function<void(Source&)> received_cb);
+
+        struct FileSource {
+            static constexpr const char* str_name = "File source";
+            const char * filename;
+            const char* ext;
+        };
+    }
+    template<>
+    inline void Show(DragDrop::FileSource& source) {
+        ImGui::Text("File[%s]: %s", source.ext, source.filename);
+    }
+}
+
+/**
+ * For ADL Lookup.
+ */
+namespace std {
+    inline void swap(ImGui::DragDrop::Source& a, ImGui::DragDrop::Source& b){
+        swap(a.p_, b.p_);
     }
 }

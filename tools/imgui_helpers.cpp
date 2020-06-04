@@ -33,7 +33,8 @@ namespace ImGui {
                     ImGui::Text("%s", display_section.first.c_str());
                     ImGui::Separator();
                 }
-                std::invoke(display_section.second);
+                if(display_section.second)
+                    std::invoke(display_section.second);
             }
             ImGui::EndChild();
         }
@@ -46,16 +47,23 @@ namespace ImGui {
     }
 
     namespace DragDrop {
-        static std::map<std::string, ImGui::DragDrop::Handler> handlers;
+        static Source current_source;
 
-        void AddHandler(TypeHandler&& handler){
-            handlers.insert(std::move(handler));
+        void ReceiveSource(std::function<void(Source&)> received_cb){
+            if(ImGui::BeginDragDropTarget()){
+                if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Source::type_name)){
+                    received_cb(GetSource());
+                }
+                ImGui::EndDragDropTarget();
+            }
         }
-        Handler* GetHandler(const std::string& str_name){
-            auto find_res = handlers.find(str_name);
-            if(find_res == handlers.end())
-                return nullptr;
-            return &find_res->second;
+
+        void SetSource(Source source){
+            current_source = std::move(source);
+        }
+
+        Source& GetSource() {
+            return current_source;
         }
     }
 }
