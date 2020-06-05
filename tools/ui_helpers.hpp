@@ -111,14 +111,14 @@ namespace ImGui {
 
     namespace DragDrop {
         namespace detail {
-            struct SourceBase {
+            struct SourceWrapperBase {
                 virtual void show() = 0;
-                virtual std::unique_ptr<SourceBase> copy() const = 0;
-                virtual std::unique_ptr<SourceBase> move() = 0;
+                virtual std::unique_ptr<SourceWrapperBase> copy() const = 0;
+                virtual std::unique_ptr<SourceWrapperBase> move() = 0;
                 virtual void swap(void* with) = 0;
                 virtual const char* typeName() = 0;
 
-                virtual ~SourceBase() = default;
+                virtual ~SourceWrapperBase() = default;
             };
 
             template<typename T>
@@ -128,12 +128,12 @@ namespace ImGui {
                 }
             };
 
-            template<typename SourceType>
-            struct SourceDerived : public SourceBase {
-                SourceType source_data_;
-                static inline const char * str_name{ TypeName<SourceType>::get() };
+            template<typename SourceData>
+            struct SourceWrapper : public SourceWrapperBase {
+                SourceData source_data_;
+                static inline const char * str_name{ TypeName<SourceData>::get() };
 
-                SourceDerived(SourceType source_data)
+                SourceWrapper(SourceData source_data)
                     : source_data_{std::move(source_data)}
                 {}
 
@@ -144,19 +144,19 @@ namespace ImGui {
                 /**
                  * Copy the source data into a unique pointer.
                  */
-                std::unique_ptr<SourceBase> copy() const override {
-                    return std::make_unique<SourceDerived>(source_data_);
+                std::unique_ptr<SourceWrapperBase> copy() const override {
+                    return std::make_unique<SourceWrapper>(source_data_);
                 }
 
                 /**
                  * Move the source data into a unique pointer.
                  */
-                std::unique_ptr<SourceBase> move() override {
-                    return std::make_unique<SourceDerived>(std::move(source_data_));
+                std::unique_ptr<SourceWrapperBase> move() override {
+                    return std::make_unique<SourceWrapper>(std::move(source_data_));
                 }
 
                 void swap(void* with) override {
-                    SourceType& with_ref{*(SourceType*)with};
+                    SourceData& with_ref{*(SourceData*)with};
                     std::swap(source_data_, with_ref);
                 }
 
@@ -172,16 +172,20 @@ namespace ImGui {
             friend void detail::ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb);
         private:
             bool isSourceType(const char * type_name);
-            std::unique_ptr<detail::SourceBase> p_{nullptr};
+            std::unique_ptr<detail::SourceWrapperBase> p_{nullptr};
         public:
             using Any = Source;
             static constexpr const char* payload_type = "easy_drag_and_drop_source";
         public:
             Source() = default;
 
-            template<typename SourceType>
-            Source(SourceType source_data)
-                : p_{std::make_unique<detail::SourceDerived<SourceType>>(std::move(source_data))}
+            /**
+             * Constructs a drag and drop payload type that encapsulates a SourceData type.
+             * Any type can be used as long as ImGui::Show is implemented for that type.
+             */
+            template<typename SourceData>
+            Source(SourceData source_data)
+                : p_{std::make_unique<detail::SourceWrapper<SourceData>>(std::move(source_data))}
             {}
 
             Source(const Source& copy);
@@ -206,8 +210,8 @@ namespace ImGui {
                 if(!p_)
                     return nullptr;
                 
-                if(detail::SourceDerived<T>* source_d{
-                    dynamic_cast<detail::SourceDerived<T>*>(p_.get())
+                if(detail::SourceWrapper<T>* source_d{
+                    dynamic_cast<detail::SourceWrapper<T>*>(p_.get())
                 }){
                     auto x{ std::make_unique<T>(
                         std::move(source_d->source_data_)
@@ -253,6 +257,17 @@ namespace ImGui {
         template<typename T>
         void ReceiveSource(std::function<void(Source&)> received_cb){
             detail::ReceiveSource(detail::TypeName<T>::get(), std::move(received_cb));
+        }
+
+        template<typename T>
+        decltype(auto) ReceiveSource(){
+            std::unique_ptr<T> source_uptr;
+
+            ReceiveSource<T>([&](Source& source){
+                source_uptr = source.extract<T>();
+            });
+
+            return source_uptr;
         }
     }
 }

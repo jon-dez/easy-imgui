@@ -75,10 +75,8 @@ namespace ImGui {
             if(ImGui::InputText("", &path,ImGuiInputTextFlags_EnterReturnsTrue)){
                 dir_ctx.explorer->swapDir(path);
             }
-            ImGui::DragDrop::ReceiveSource<std::filesystem::path>([&](ImGui::DragDrop::Source& source){
-                if(auto x{source.extract<std::filesystem::path>()})
-                    dir_ctx.explorer->swapDir(*x);
-            });
+            if(auto path{ImGui::DragDrop::ReceiveSource<std::filesystem::path>()})
+                    dir_ctx.explorer->swapDir(*path);
             
             ImGui::PopItemWidth();
         }
