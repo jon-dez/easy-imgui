@@ -10,6 +10,7 @@
 #include <stack>
 
 #include "imgui.h"
+#include "imgui_show.hpp"
 
 /**
  * Return a maximum rect size for a rect_a that would fit in rect_b.
@@ -57,6 +58,14 @@ inline RectB centerRectAInRectB(const RectA& rect_a, const RectB& rect_b){
     };
 }
 
+
+namespace ImGui::DragDrop {
+    class Source; // fwd
+}
+namespace std {
+    void swap(ImGui::DragDrop::Source& a, ImGui::DragDrop::Source& b);
+}
+
 namespace ImGui {
     using Display = std::pair<std::string, std::function<void()>>;
 
@@ -100,31 +109,29 @@ namespace ImGui {
 
     void ImageAutoFit(ImTextureID user_texture_id, const ImVec2& size, const ImVec2& uv0 = ImVec2(0,0), const ImVec2& uv1 = ImVec2(1,1), const ImVec4& tint_col = ImVec4(1,1,1,1), const ImVec4& border_col = ImVec4(0,0,0,0));
 
-    template<typename T>
-    void Show(T& t);
-
-    template<typename T>
-    inline void ShowP(void* p) {
-        T& t = *(T*)p;
-        Show(t);
-    }
-
     namespace DragDrop {
         namespace detail {
             struct SourceBase {
                 virtual void show() = 0;
                 virtual std::unique_ptr<SourceBase> copy() const = 0;
-                virtual void move(void* into) = 0;
+                virtual std::unique_ptr<SourceBase> move() = 0;
                 virtual void swap(void* with) = 0;
                 virtual const char* typeName() = 0;
 
                 virtual ~SourceBase() = default;
             };
 
+            template<typename T>
+            struct TypeName {
+                static const char* get(){
+                    return typeid(T).name();
+                }
+            };
+
             template<typename SourceType>
             struct SourceDerived : public SourceBase {
                 SourceType source_data_;
-                static constexpr const char * const str_name = SourceType::str_name;
+                static inline const char * str_name{ TypeName<SourceType>::get() };
 
                 SourceDerived(SourceType source_data)
                     : source_data_{std::move(source_data)}
@@ -134,13 +141,18 @@ namespace ImGui {
                     ImGui::Show(source_data_);
                 }
 
+                /**
+                 * Copy the source data into a unique pointer.
+                 */
                 std::unique_ptr<SourceBase> copy() const override {
                     return std::make_unique<SourceDerived>(source_data_);
                 }
 
-                void move(void* into) override {
-                    SourceType& into_ref{*(SourceType*)into};
-                    into_ref = std::move(source_data_);
+                /**
+                 * Move the source data into a unique pointer.
+                 */
+                std::unique_ptr<SourceBase> move() override {
+                    return std::make_unique<SourceDerived>(std::move(source_data_));
                 }
 
                 void swap(void* with) override {
@@ -152,12 +164,19 @@ namespace ImGui {
                     return str_name;
                 }
             };
+
+            void ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb);
         }
 
-        struct Source {
-            static constexpr const char* type_name = "easy_drag_and_drop_source";
+        class Source {
+            friend void detail::ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb);
+        private:
+            bool isSourceType(const char * type_name);
             std::unique_ptr<detail::SourceBase> p_{nullptr};
-
+        public:
+            using Any = Source;
+            static constexpr const char* payload_type = "easy_drag_and_drop_source";
+        public:
             Source() = default;
 
             template<typename SourceType>
@@ -165,60 +184,62 @@ namespace ImGui {
                 : p_{std::make_unique<detail::SourceDerived<SourceType>>(std::move(source_data))}
             {}
 
-            inline Source(Source&& move) noexcept
-                : p_{std::move(move.p_)}
-            {}
+            Source(const Source& copy);
+            Source(Source&& move) noexcept;
+            Source& operator=(const Source& copy);
+            Source& operator=(Source&& move) noexcept;
 
-            inline Source(const Source& copy)
-            {
-                *this = copy;
+            friend void std::swap(Source& a, Source& b);
+            void show();
+
+            template<typename T>
+            bool isSourceType() {
+                return isSourceType(detail::TypeName<T>::get());
             }
 
-            friend void swap(Source& a, Source& b);
-
-            Source& operator=(const Source& copy){
-                if(copy.p_)
-                    p_ = copy.p_->copy();
-                else
-                    p_ = nullptr;
-                return *this;
-            }
-
-            inline void show() {
-                if(p_)
-                    p_->show();
-                else
-                    ImGui::Text("There is no source data.");
-            }
-
-            inline const char* typeName(){
-                if(p_)
-                    return p_->typeName();
-                return "NULL";
+            /**
+             * Moves the source data into a unique pointer if
+             * the underlying type is successfully dynamically casted.
+             */
+            template<typename T>
+            std::unique_ptr<T> extract() {
+                if(!p_)
+                    return nullptr;
+                
+                if(detail::SourceDerived<T>* source_d{
+                    dynamic_cast<detail::SourceDerived<T>*>(p_.get())
+                }){
+                    auto x{ std::make_unique<T>(
+                        std::move(source_d->source_data_)
+                    ) };
+                    
+                    p_.reset(); // Reset the unique pointer, since the source data was moved from it.
+                    return x;
+                }
+                return nullptr;
             }
         };
 
+        template<>
+        constexpr bool Source::isSourceType<Source::Any>()
+        { return true; }
 
-        void SetSource(Source source);
+        void SetSource(Source&& source);
         Source& GetSource();
 
         template<typename T>
-        void BeginSource(T& src_type, ImGuiDragDropFlags flags = ImGuiDragDropFlags_SourceAllowNullID, ImGuiCond cond = ImGuiCond_Once){
-            //ImGui::PushID(&src_type);
+        void BeginSource(T&& src_type, ImGuiDragDropFlags flags = ImGuiDragDropFlags_SourceAllowNullID, ImGuiCond cond = ImGuiCond_Once){
             if(ImGui::BeginDragDropSource(flags)){
+                // Set the source data payload.
                 if(auto payload = ImGui::GetDragDropPayload()){
                     if(cond == ImGuiCond_Always || payload->DataFrameCount == -1){
-                        SetSource(src_type);
+                        SetSource(std::forward<T>(src_type));
                     }
-                    ImGui::MakeSection({GetSource().typeName(),
-                        [](){
-                            GetSource().show();
-                        }
-                    }, {200,100});
+                    GetSource().show();
                 }
 
                 if(ImGui::SetDragDropPayload(
-                    Source::type_name,
+                    Source::payload_type,
                     NULL,
                     0,
                     cond
@@ -227,28 +248,11 @@ namespace ImGui {
                 }
                 ImGui::EndDragDropSource();
             }
-            //ImGui::PopID();
         }
-        
-        void ReceiveSource(std::function<void(Source&)> received_cb);
 
-        struct FileSource {
-            static constexpr const char* str_name = "File source";
-            const char * filename;
-            const char* ext;
-        };
-    }
-    template<>
-    inline void Show(DragDrop::FileSource& source) {
-        ImGui::Text("File[%s]: %s", source.ext, source.filename);
-    }
-}
-
-/**
- * For ADL Lookup.
- */
-namespace std {
-    inline void swap(ImGui::DragDrop::Source& a, ImGui::DragDrop::Source& b){
-        swap(a.p_, b.p_);
+        template<typename T>
+        void ReceiveSource(std::function<void(Source&)> received_cb){
+            detail::ReceiveSource(detail::TypeName<T>::get(), std::move(received_cb));
+        }
     }
 }

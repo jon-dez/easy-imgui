@@ -75,6 +75,11 @@ namespace ImGui {
             if(ImGui::InputText("", &path,ImGuiInputTextFlags_EnterReturnsTrue)){
                 dir_ctx.explorer->swapDir(path);
             }
+            ImGui::DragDrop::ReceiveSource<std::filesystem::path>([&](ImGui::DragDrop::Source& source){
+                if(auto x{source.extract<std::filesystem::path>()})
+                    dir_ctx.explorer->swapDir(*x);
+            });
+            
             ImGui::PopItemWidth();
         }
 
@@ -123,8 +128,7 @@ namespace ImGui {
                             dir_ctx.explorer->selectChild(dir_entry.path().string());
                     }
                 }
-                ImGui::DragDrop::FileSource x{"Test", "test"};
-                ImGui::DragDrop::BeginSource(x);
+                ImGui::DragDrop::BeginSource(std::move(dir_entry.path()));
             }
         }
 

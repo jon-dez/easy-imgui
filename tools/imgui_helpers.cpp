@@ -48,22 +48,69 @@ namespace ImGui {
 
     namespace DragDrop {
         static Source current_source;
-
-        void ReceiveSource(std::function<void(Source&)> received_cb){
-            if(ImGui::BeginDragDropTarget()){
-                if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Source::type_name)){
-                    received_cb(GetSource());
+        namespace detail {
+            void ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb){
+                if(ImGui::BeginDragDropTarget()){
+                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Source::payload_type)){
+                        if(current_source.isSourceType(type_name))
+                            received_cb(current_source);
+                    }
+                    ImGui::EndDragDropTarget();
                 }
-                ImGui::EndDragDropTarget();
             }
         }
 
-        void SetSource(Source source){
+        void SetSource(Source&& source){
             current_source = std::move(source);
         }
 
         Source& GetSource() {
             return current_source;
         }
+
+        Source::Source(Source&& move) noexcept
+        {
+            *this = std::move(move);
+        }
+        Source::Source(const Source& copy){
+            *this = copy;
+        }
+
+        Source& Source::operator=(const Source& copy){
+            if(copy.p_)
+                p_ = copy.p_->copy();
+            else
+                p_ = nullptr;
+            return *this;
+        }
+
+        Source& Source::operator=(Source&& move) noexcept {
+            p_ = std::move(move.p_);
+            return *this;
+        }
+
+        void Source::show() {
+            if(p_)
+                p_->show();
+            else
+                ImGui::Text("There is no source data.");
+        }
+
+        bool Source::isSourceType(const char* type_name){
+            if(strcmp(detail::TypeName<Any>::get(), type_name) == 0)
+                return true;
+            if(p_)
+                return strcmp(type_name, p_->typeName()) == 0;
+            return false;
+        }
+    }
+}
+
+/**
+ * For ADL Lookup.
+ */
+namespace std {
+    void swap(ImGui::DragDrop::Source& a, ImGui::DragDrop::Source& b){
+        swap(a.p_, b.p_);
     }
 }
