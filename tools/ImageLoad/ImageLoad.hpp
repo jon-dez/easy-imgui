@@ -68,8 +68,9 @@ public:
 
 
 class Texture {
-    std::unique_ptr<ImageByteData> img_res;
+    friend void std::swap(Texture& a, Texture& b);
 private:
+    std::unique_ptr<ImageByteData> img_res;
     ImageRID handle;
     void free();
 public:

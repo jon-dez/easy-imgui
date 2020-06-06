@@ -225,6 +225,11 @@ namespace std {
         swap(a.num_channels, b.num_channels);
         swap(a.byte_data, b.byte_data);
     }
+
+    void swap(Texture& a, Texture& b){
+        swap(a.handle, b.handle);
+        swap(a.img_res, b.img_res);
+    }
 }
 
 Texture::Texture()
@@ -240,3 +245,7 @@ Texture::~Texture() {
     free();
 }
 
+Texture& Texture::operator=(Texture assign){
+    std::swap(*this, assign);
+    return *this;
+}
