@@ -97,7 +97,7 @@ namespace GPUTexture {
     void openGLFree(const ImageRID& rid){
         glDeleteTextures(1, (GLuint*)&rid);
     }
-    
+
     namespace SideLoader {
         static std::mutex gl_ctx_mutex;
         static GLFWwindow* texture_sideload_ctx = nullptr;
@@ -114,7 +114,7 @@ namespace GPUTexture {
         
         void add_job(GPUTextureJob job){
             TP::add_job(
-                [job](){
+                [job = std::move(job)](){
                     std::lock_guard<std::mutex> lock{gl_ctx_mutex};
                     glfwMakeContextCurrent(texture_sideload_ctx);
                     job();
@@ -125,89 +125,118 @@ namespace GPUTexture {
     }
 }
 
-
-ImageResourceData::ImageResourceData(const ImageResourceData& copy_data)
-{
-    *this = copy_data;
-}
-
-ImageResourceData::ImageResourceData(ImageResourceData&& move_data)
+ImageByteData::ImageByteData(ImageByteData&& move_data)
+    : ImageByteData()
 {
     std::swap(*this, move_data);
-    move_data.bytes = nullptr;
+    //move_data.bytes = nullptr;
 }
 
-ImageResourceData& ImageResourceData::operator=(const ImageResourceData& copy_data){
-    width = copy_data.width;
-    height = copy_data.height;
-    num_channels = copy_data.num_channels;
-    if(copy_data.bytes)
-        memcpy(this->bytes, copy_data.bytes, width*height*num_channels);
+void Texture::free() {
+    GPUTexture::SideLoader::add_job([handle = handle](){
+        GPUTexture::openGLFree(handle);
+    });
+    handle = 0;
+}
+
+ImageByteData::ImageByteData()
+    : width{}
+    , height{}
+    , num_channels{}
+    , byte_data{}
+{}
+
+ImageByteData::ImageByteData(const ImageByteData& copy)
+    : width{ copy.width }
+    , height{ copy.height }
+    , num_channels{ copy.num_channels }
+    , byte_data{ copy.cloneBytes() }
+{}
+
+ImageByteData& ImageByteData::operator=(ImageByteData assign) {
+    std::swap(*this, assign);
     return *this;
 }
 
-inline void ImageResource::freeBytes() {
-    if(this->data.bytes){
-        stbi_image_free(this->data.bytes);
-        this->data.bytes = nullptr;
-    }
+std::unique_ptr<uint8_t, ImageByteData::D> ImageByteData::cloneBytes() const {
+    decltype(byte_data) bd_clone;
+
+    if(byte_data)
+        memcpy(bd_clone.get(), byte_data.get(), width*height*num_channels);
+    
+    return bd_clone;
 }
 
-void ImageResource::freeTexture() {
-    GPUTexture::SideLoader::add_job([this](){
-        GPUTexture::openGLFree(this->rid);
-        this->rid = 0;
-    });
-}
-
-ImageResource::~ImageResource() {
-    this->freeBytes();
-    this->freeTexture();
-}
-
-ImageResource::ImageResource(const ImageResource& copy_img_res):
-data{copy_img_res.data}
-{
-    // Copy the gpu image resource.
-    if(copy_img_res.rid)
-        GPUTexture::SideLoader::add_job(
-            [this, cpy_rid = copy_img_res.rid](){
-                GPUTexture::openGLCopy(this->rid, cpy_rid, this->getWidth(), this->getHeight(), this->data.num_channels);
-            }
-        );
-}
-
-ImageResource::ImageResource(const std::string& image_location, bool to_gpu, bool flip) {
+ImageByteData::ImageByteData(const std::string& image_location, bool flip) {
     this->load(image_location, flip);
 }
 
-void ImageResource::load(const std::string& image_location, bool to_gpu, bool flip) {
+void ImageByteData::load(const std::string& image_location, bool flip) {
     FILE* image_file = fopen(image_location.c_str(), "rb");
     if(image_file == nullptr)
         return;
     this->loadFILE(image_file, flip);
     fclose(image_file);
-
-    if(to_gpu)
-        this->sendToGPU();
 }
 
-void ImageResource::sendToGPU() {
-    if(!this->data.bytes)
+void Texture::upload(Texture& texture) {
+    if(!texture.img_res->byte_data)
         return; // There is no image data to upload to the gpu.
-    GPUTexture::SideLoader::add_job([this](){
-        GPUTexture::openGLFree(this->rid);
-        GPUTexture::openGLUpload(this->rid, this->data.width, this->data.height, this->data.num_channels, this->data.bytes);
-        delete[] this->data.bytes;
-        this->data.bytes = nullptr;
+    if(!glfwGetCurrentContext())
+        return; // There is no open gl context, therefore we cannot upload the texture data.
+    GPUTexture::openGLFree(texture.handle);
+    GPUTexture::openGLUpload(
+        texture.handle,
+        texture.img_res->width,
+        texture.img_res->height,
+        texture.img_res->num_channels,
+        texture.img_res->byte_data.get()
+    );
+    texture.img_res->byte_data.reset();
+}
+
+void Texture::uploadAsync(std::shared_ptr<Texture> texture) {
+    GPUTexture::SideLoader::add_job([texture = std::move(texture)](){
+        Texture::upload(*texture);
     });
+}
+
+void ImageByteData::D::operator()(uint8_t* d) const {
+    stbi_image_free(d);
 }
 
 /**
  * Load the image from an open file.
  */
-void ImageResource::loadFILE(FILE* image_file, bool flip) {
-	this->freeBytes(); // Free any possible bytes from a previous texture, if there were any.
+void ImageByteData::loadFILE(FILE* image_file, bool flip) {
 	stbi_set_flip_vertically_on_load(flip);
-	this->data.bytes = stbi_load_from_file(image_file, &this->data.width, &this->data.height, &this->data.num_channels, 0);
+    uint8_t* bytes{ stbi_load_from_file(image_file, &width, &height, &num_channels, 0) };
+    byte_data = decltype(byte_data)(
+	    bytes,
+        D()
+    );
 }
+
+
+namespace std {
+    void swap(ImageByteData& a, ImageByteData& b){
+        swap(a.width, b.width);
+        swap(a.height, b.height);
+        swap(a.num_channels, b.num_channels);
+        swap(a.byte_data, b.byte_data);
+    }
+}
+
+Texture::Texture()
+    : img_res{std::make_unique<ImageByteData>()}
+    , handle{ }
+{}
+
+Texture::Texture(ImageByteData&& image)
+    : img_res{std::make_unique<ImageByteData>(std::move(image))}
+{}
+
+Texture::~Texture() {
+    free();
+}
+

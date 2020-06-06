@@ -4,35 +4,9 @@
 
 #pragma once
 #include <functional>
+#include <memory>
 
 using ImageRID = uintptr_t;
-
-struct ImageResourceData {
-    int width;
-    int height;
-    int num_channels;
-    uint8_t* bytes;
-
-    ImageResourceData() = default;
-    ImageResourceData(const ImageResourceData& copy_data);
-    ImageResourceData(ImageResourceData&& move_data);
-
-    ImageResourceData& operator=(const ImageResourceData& copy_data);
-
-    ~ImageResourceData(){
-        if(bytes)
-            delete[] bytes;
-    }
-};
-
-namespace std {
-    inline void swap(ImageResourceData& a, ImageResourceData& b){
-        swap(a.width, b.width);
-        swap(a.height, b.height);
-        swap(a.num_channels, b.num_channels);
-        swap(a.bytes, b.bytes);
-    }
-}
 
 namespace GPUTexture {
     void openGLUpload(ImageRID& rid, int width, int height, int num_channels, const uint8_t* bytes);
@@ -48,31 +22,79 @@ namespace GPUTexture {
     }
 }
 
-class ImageResource {
-private:
-    ImageResourceData data;
+class ImageByteData;
+class Texture;
 
-    ImageRID rid = 0;
+namespace std {
+    void swap(ImageByteData& a, ImageByteData& b);
+    void swap(Texture& a, Texture& b);
+}
+
+class ImageByteData {
+    friend class Texture;
+public:
+    struct D {
+        void operator()(uint8_t* d) const;
+    };
+private:
+    int width;
+    int height;
+    int num_channels;
+    std::unique_ptr<uint8_t, D> byte_data;
     
-    void freeBytes();
-    void freeTexture();
+    friend void std::swap(ImageByteData& a, ImageByteData& b);
+
+    void free();
     void loadFILE(FILE* image_file, bool flip = false);
     void loadPATH(const std::string& image_path, bool flip = false);
+    void load(const std::string& image_location, bool flip = false);
 public:
-    ~ImageResource();
-    inline ImageResource(){}
-    ImageResource(const ImageResource& img_res);
-    ImageResource(const std::string& image_location, bool to_gpu, bool flip = false);
-    void load(const std::string& image_location, bool to_gpu, bool flip = false);
-    
-    void sendToGPU();
+    ImageByteData();
+    ImageByteData(const ImageByteData& copy);
+    ImageByteData(ImageByteData&& move);
 
-    inline int getWidth() { return this->data.width; }
-    inline int getHeight() { return this->data.height; }
+    ImageByteData& operator=(ImageByteData assign);
+
+    ImageByteData(const std::string& image_location, bool flip = false);
+
+    inline int getWidth() const
+    { return this->width; }
+
+    inline int getHeight() const
+    { return this->height; }
+
+    std::unique_ptr<uint8_t, D> cloneBytes() const;
+};
+
+
+class Texture {
+    std::unique_ptr<ImageByteData> img_res;
+private:
+    ImageRID handle;
+    void free();
+public:
+    static void upload(Texture& texture);
+    static void uploadAsync(std::shared_ptr<Texture> texture_shared);
+public:
+
+    Texture();
+    Texture(const Texture& copy);
+    Texture(Texture&& move);
+
+    Texture& operator=(Texture assign);
+
+    Texture(ImageByteData&& move_byte_data);
+    ~Texture();
+    
     /**
      * Get the resource handle of the image on the gpu.
      */
-    inline ImageRID getRID() {
-        return this->rid;
-    }
+    inline ImageRID getHandle() const
+    { return handle; }
+
+    inline int getWidth() const
+    { return img_res->width; }
+
+    inline int getHeight() const
+    { return img_res->height; }
 };

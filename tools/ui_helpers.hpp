@@ -164,12 +164,11 @@ namespace ImGui {
                     return str_name;
                 }
             };
-
-            void ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb);
         }
 
         class Source {
-            friend void detail::ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb);
+            template<typename T, typename Callable>
+            friend void ReceiveSource(Callable received_cb);
         private:
             bool isSourceType(const char * type_name);
             std::unique_ptr<detail::SourceWrapperBase> p_{nullptr};
@@ -254,9 +253,17 @@ namespace ImGui {
             }
         }
 
-        template<typename T>
-        void ReceiveSource(std::function<void(Source&)> received_cb){
-            detail::ReceiveSource(detail::TypeName<T>::get(), std::move(received_cb));
+        template<typename T, typename Callable>
+        void ReceiveSource(Callable received_cb){
+            static_assert(std::is_invocable_r_v<void, decltype(received_cb), Source&>,
+                "The Callback needs to match the function signature \"void(Source&&)\".");
+            if(ImGui::BeginDragDropTarget()){
+                if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Source::payload_type)){
+                    if(GetSource().isSourceType( detail::TypeName<T>::get() ))
+                        received_cb(GetSource());
+                }
+                ImGui::EndDragDropTarget();
+            }
         }
 
         template<typename T>

@@ -48,17 +48,6 @@ namespace ImGui {
 
     namespace DragDrop {
         static Source current_source;
-        namespace detail {
-            void ReceiveSource(const char* type_name, std::function<void(Source&)> received_cb){
-                if(ImGui::BeginDragDropTarget()){
-                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Source::payload_type)){
-                        if(current_source.isSourceType(type_name))
-                            received_cb(current_source);
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-            }
-        }
 
         void SetSource(Source&& source){
             current_source = std::move(source);
