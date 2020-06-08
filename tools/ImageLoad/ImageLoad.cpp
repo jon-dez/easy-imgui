@@ -125,8 +125,8 @@ namespace GPUTexture {
     }
 }
 
-ImageByteData::ImageByteData(ImageByteData&& move_data)
-    : ImageByteData()
+ImagePixelData::ImagePixelData(ImagePixelData&& move_data)
+    : ImagePixelData()
 {
     std::swap(*this, move_data);
     //move_data.bytes = nullptr;
@@ -139,60 +139,72 @@ void Texture::free() {
     handle = 0;
 }
 
-ImageByteData::ImageByteData()
+ImagePixelData::ImagePixelData()
     : width{}
     , height{}
     , num_channels{}
-    , byte_data{}
+    , pixel_bytes{}
 {}
 
-ImageByteData::ImageByteData(const ImageByteData& copy)
+ImagePixelData::ImagePixelData(const ImagePixelData& copy)
     : width{ copy.width }
     , height{ copy.height }
     , num_channels{ copy.num_channels }
-    , byte_data{ copy.cloneBytes() }
+    , pixel_bytes{ copy.clonePixelBytes() }
 {}
 
-ImageByteData& ImageByteData::operator=(ImageByteData assign) {
+ImagePixelData& ImagePixelData::operator=(ImagePixelData assign) {
     std::swap(*this, assign);
     return *this;
 }
 
-std::unique_ptr<uint8_t, ImageByteData::D> ImageByteData::cloneBytes() const {
-    decltype(byte_data) bd_clone;
+std::unique_ptr<uint8_t, ImagePixelData::D> ImagePixelData::clonePixelBytes() const {
+    decltype(pixel_bytes) bd_clone;
 
-    if(byte_data)
-        memcpy(bd_clone.get(), byte_data.get(), width*height*num_channels);
+    if(pixel_bytes)
+        memcpy(bd_clone.get(), pixel_bytes.get(), width*height*num_channels);
     
     return bd_clone;
 }
 
-ImageByteData::ImageByteData(const std::string& image_location, bool flip) {
-    this->load(image_location, flip);
+std::unique_ptr<uint8_t, ImagePixelData::D> ImagePixelData::movePixelBytes() {
+    return std::move(pixel_bytes);
 }
 
-void ImageByteData::load(const std::string& image_location, bool flip) {
+ImagePixelData::ImagePixelData(const std::string& image_location, bool flip) {
+    this->load(*this, image_location, flip);
+}
+
+void ImagePixelData::load(ImagePixelData& image, const std::string& image_location, bool flip) {
     FILE* image_file = fopen(image_location.c_str(), "rb");
     if(image_file == nullptr)
         return;
-    this->loadFILE(image_file, flip);
+    
+    // Load the image file location.
+	stbi_set_flip_vertically_on_load(flip);
+    uint8_t* bytes{ stbi_load_from_file(image_file, &image.width, &image.height, &image.num_channels, 0) };
+    image.pixel_bytes = decltype(image.pixel_bytes)(
+	    bytes,
+        D() // The function object will be called to free the bytes read from the file.
+    );
+
     fclose(image_file);
 }
 
 void Texture::upload(Texture& texture) {
-    if(!texture.img_res->byte_data)
+    if(!texture.image_data->pixel_bytes)
         return; // There is no image data to upload to the gpu.
     if(!glfwGetCurrentContext())
         return; // There is no open gl context, therefore we cannot upload the texture data.
     GPUTexture::openGLFree(texture.handle);
     GPUTexture::openGLUpload(
         texture.handle,
-        texture.img_res->width,
-        texture.img_res->height,
-        texture.img_res->num_channels,
-        texture.img_res->byte_data.get()
+        texture.image_data->width,
+        texture.image_data->height,
+        texture.image_data->num_channels,
+        texture.image_data->pixel_bytes.get()
     );
-    texture.img_res->byte_data.reset();
+    texture.image_data->pixel_bytes.reset();
 }
 
 void Texture::uploadAsync(std::shared_ptr<Texture> texture) {
@@ -201,44 +213,31 @@ void Texture::uploadAsync(std::shared_ptr<Texture> texture) {
     });
 }
 
-void ImageByteData::D::operator()(uint8_t* d) const {
+void ImagePixelData::D::operator()(uint8_t* d) const {
     stbi_image_free(d);
 }
 
-/**
- * Load the image from an open file.
- */
-void ImageByteData::loadFILE(FILE* image_file, bool flip) {
-	stbi_set_flip_vertically_on_load(flip);
-    uint8_t* bytes{ stbi_load_from_file(image_file, &width, &height, &num_channels, 0) };
-    byte_data = decltype(byte_data)(
-	    bytes,
-        D()
-    );
-}
-
-
 namespace std {
-    void swap(ImageByteData& a, ImageByteData& b){
+    void swap(ImagePixelData& a, ImagePixelData& b){
         swap(a.width, b.width);
         swap(a.height, b.height);
         swap(a.num_channels, b.num_channels);
-        swap(a.byte_data, b.byte_data);
+        swap(a.pixel_bytes, b.pixel_bytes);
     }
 
     void swap(Texture& a, Texture& b){
         swap(a.handle, b.handle);
-        swap(a.img_res, b.img_res);
+        swap(a.image_data, b.image_data);
     }
 }
 
 Texture::Texture()
-    : img_res{std::make_unique<ImageByteData>()}
+    : image_data{std::make_unique<ImagePixelData>()}
     , handle{ }
 {}
 
-Texture::Texture(ImageByteData&& image)
-    : img_res{std::make_unique<ImageByteData>(std::move(image))}
+Texture::Texture(ImagePixelData&& image)
+    : image_data{std::make_unique<ImagePixelData>(std::move(image))}
 {}
 
 Texture::~Texture() {

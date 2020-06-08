@@ -22,15 +22,15 @@ namespace GPUTexture {
     }
 }
 
-class ImageByteData;
+class ImagePixelData;
 class Texture;
 
 namespace std {
-    void swap(ImageByteData& a, ImageByteData& b);
+    void swap(ImagePixelData& a, ImagePixelData& b);
     void swap(Texture& a, Texture& b);
 }
 
-class ImageByteData {
+class ImagePixelData {
     friend class Texture;
 public:
     struct D {
@@ -40,22 +40,19 @@ private:
     int width;
     int height;
     int num_channels;
-    std::unique_ptr<uint8_t, D> byte_data;
+    std::unique_ptr<uint8_t, D> pixel_bytes;
     
-    friend void std::swap(ImageByteData& a, ImageByteData& b);
-
-    void free();
-    void loadFILE(FILE* image_file, bool flip = false);
-    void loadPATH(const std::string& image_path, bool flip = false);
-    void load(const std::string& image_location, bool flip = false);
+    friend void std::swap(ImagePixelData& a, ImagePixelData& b);
 public:
-    ImageByteData();
-    ImageByteData(const ImageByteData& copy);
-    ImageByteData(ImageByteData&& move);
+    static void load(ImagePixelData& image, const std::string& image_location, bool flip = false);
+public:
+    ImagePixelData();
+    ImagePixelData(const ImagePixelData& copy);
+    ImagePixelData(ImagePixelData&& move);
 
-    ImageByteData& operator=(ImageByteData assign);
+    ImagePixelData& operator=(ImagePixelData assign);
 
-    ImageByteData(const std::string& image_location, bool flip = false);
+    ImagePixelData(const std::string& image_location, bool flip = false);
 
     inline int getWidth() const
     { return this->width; }
@@ -63,14 +60,15 @@ public:
     inline int getHeight() const
     { return this->height; }
 
-    std::unique_ptr<uint8_t, D> cloneBytes() const;
+    std::unique_ptr<uint8_t, D> clonePixelBytes() const;
+    std::unique_ptr<uint8_t, D> movePixelBytes();
 };
 
 
 class Texture {
     friend void std::swap(Texture& a, Texture& b);
 private:
-    std::unique_ptr<ImageByteData> img_res;
+    std::unique_ptr<ImagePixelData> image_data;
     ImageRID handle;
     void free();
 public:
@@ -84,7 +82,7 @@ public:
 
     Texture& operator=(Texture assign);
 
-    Texture(ImageByteData&& move_byte_data);
+    Texture(ImagePixelData&& move_byte_data);
     ~Texture();
     
     /**
@@ -94,8 +92,8 @@ public:
     { return handle; }
 
     inline int getWidth() const
-    { return img_res->width; }
+    { return image_data->width; }
 
     inline int getHeight() const
-    { return img_res->height; }
+    { return image_data->height; }
 };
